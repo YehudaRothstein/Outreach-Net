@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useForm } from 'react-hook-form';
-import { AlertCircle, User, MessageSquare, Eye, Tag, ArrowLeft, Flag, Trash2 } from 'lucide-react';
+import { AlertCircle, User, MessageSquare, Eye, Tag, ArrowLeft, Flag, Trash2, Heart } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { 
-  getThreadById, 
-  getCommentsByThreadId, 
-  addComment, 
-  Thread, 
-  Comment 
+import {
+  getThreadById,
+  getCommentsByThreadId,
+  addComment,
+  toggleThreadLike,
+  Thread,
+  Comment
 } from '../services/threadService';
 import CommentItem from '../components/CommentItem';
 import toast from 'react-hot-toast';
@@ -25,21 +26,25 @@ const ThreadView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [commenting, setCommenting] = useState(false);
+  const [liking, setLiking] = useState(false);
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>();
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Check if current user has liked the thread
+  const hasUserLiked = user && thread?.likes?.includes(user.uid);
+
   useEffect(() => {
     const fetchThreadAndComments = async () => {
       if (!id) return;
-      
+
       setLoading(true);
       setError(null);
-      
+
       try {
         const threadData = await getThreadById(id);
         setThread(threadData);
-        
+
         const commentsData = await getCommentsByThreadId(id);
         setComments(commentsData);
       } catch (err: any) {
@@ -49,15 +54,15 @@ const ThreadView = () => {
         setLoading(false);
       }
     };
-    
+
     fetchThreadAndComments();
   }, [id]);
 
   const onSubmitComment = async (data: FormData) => {
     if (!id || !user) return;
-    
+
     setCommenting(true);
-    
+
     try {
       await addComment(
         id,
@@ -66,11 +71,11 @@ const ThreadView = () => {
         user.displayName || 'Anonymous',
         user.photoURL
       );
-      
+
       // Fetch updated comments
       const updatedComments = await getCommentsByThreadId(id);
       setComments(updatedComments);
-      
+
       // Update thread with new comment count
       if (thread) {
         setThread({
@@ -78,7 +83,7 @@ const ThreadView = () => {
           commentCount: (thread.commentCount || 0) + 1
         });
       }
-      
+
       // Reset form
       reset();
       toast.success('Comment added successfully');
@@ -87,6 +92,28 @@ const ThreadView = () => {
       toast.error('Failed to add comment. Please try again.');
     } finally {
       setCommenting(false);
+    }
+  };
+
+  const handleLikeToggle = async () => {
+    if (!id || !user || !thread || liking) return;
+
+    setLiking(true);
+
+    try {
+      const updatedThread = await toggleThreadLike(id, user.uid);
+      setThread(updatedThread);
+
+      if (hasUserLiked) {
+        toast.success('Removed like');
+      } else {
+        toast.success('Added like');
+      }
+    } catch (err: any) {
+      console.error('Error toggling like:', err);
+      toast.error('Failed to update like status');
+    } finally {
+      setLiking(false);
     }
   };
 
@@ -129,6 +156,7 @@ const ThreadView = () => {
   }
 
   const isAuthor = user && thread.userId === user.uid;
+  const likeCount = thread.likes?.length || 0;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -143,16 +171,18 @@ const ThreadView = () => {
         <div className="mb-4">
           <div className="flex justify-between items-start">
             <h1 className="text-2xl font-bold text-gray-900">{thread.title}</h1>
-            {user && !isAuthor && (
-              <button className="text-gray-400 hover:text-gray-600" title="Report thread">
-                <Flag className="h-5 w-5" />
-              </button>
-            )}
-            {isAuthor && (
-              <button className="text-gray-400 hover:text-red-500" title="Delete thread">
-                <Trash2 className="h-5 w-5" />
-              </button>
-            )}
+            <div className="flex space-x-2">
+              {user && !isAuthor && (
+                <button className="text-gray-400 hover:text-gray-600" title="Report thread">
+                  <Flag className="h-5 w-5" />
+                </button>
+              )}
+              {isAuthor && (
+                <button className="text-gray-400 hover:text-red-500" title="Delete thread">
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center text-sm text-gray-500">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-2 mb-1">
@@ -166,15 +196,25 @@ const ThreadView = () => {
             </span>
           </div>
         </div>
-        
+
         <div className="prose max-w-none text-gray-800 mb-6">
           {thread.content.split('\n').map((paragraph, i) => (
             paragraph ? <p key={i}>{paragraph}</p> : <br key={i} />
           ))}
         </div>
-        
+
         <div className="flex flex-wrap items-center justify-between text-sm text-gray-500 border-t border-gray-200 pt-4">
           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
+            <button
+              onClick={handleLikeToggle}
+              disabled={!user || liking}
+              className={`flex items-center transition-colors ${!user ? 'cursor-not-allowed opacity-60' : 'hover:text-[var(--frc-blue)]'} ${hasUserLiked ? 'text-red-500 hover:text-red-600' : ''}`}
+              title={user ? (hasUserLiked ? "Unlike" : "Like") : "Sign in to like"}
+            >
+              <Heart className={`h-5 w-5 mr-1 ${hasUserLiked ? 'fill-current' : ''}`} />
+              <span>{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>
+            </button>
+
             <div className="flex items-center">
               <MessageSquare className="h-4 w-4 mr-1" />
               <span>{thread.commentCount || 0} comments</span>
