@@ -14,6 +14,8 @@ import {
     DocumentSnapshot
 } from 'firebase/firestore';
 import {db} from '../firebase/config';
+import {requireAdmin} from '../middleware/roleMiddleware';
+
 
 export interface Thread {
     id: string;
@@ -31,6 +33,7 @@ export interface Thread {
     commentCount: number;
     viewCount: number;
     likes?: string[];
+    status: 'active' | 'deleted' | 'archived'; // Added status field
 }
 
 export interface Comment {
@@ -38,13 +41,16 @@ export interface Comment {
     threadId: string;
     content: string;
     userId: string;
+    isDeleted?: boolean; // Added property
     author: {
         displayName: string;
         photoURL: string | null;
+        isBanned?: boolean; // Added property
     };
     createdAt: Date;
     updatedAt: Date;
     likes?: string[];
+    status: 'active' | 'deleted'; // Added status field
 }
 
 export const createThread = async (
@@ -419,124 +425,122 @@ export const toggleCommentLike = async (commentId: string, userId: string): Prom
 
 // Delete a comment (admin only)
 export const deleteComment = async (commentId: string) => {
-  try {
-    const commentRef = doc(db, 'comments', commentId);
-    const commentDoc = await getDoc(commentRef);
+    try {
+        const commentRef = doc(db, 'comments', commentId);
+        const commentDoc = await getDoc(commentRef);
 
-    if (!commentDoc.exists()) {
-      throw new Error('Comment not found');
+        if (!commentDoc.exists()) {
+            throw new Error('Comment not found');
+        }
+
+        // Instead of completely removing, mark as deleted
+        await updateDoc(commentRef, {
+            isDeleted: true,
+            content: "[This comment has been removed by an administrator]",
+            updatedAt: serverTimestamp()
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        throw error;
     }
-
-    // Instead of completely removing, mark as deleted
-    await updateDoc(commentRef, {
-      isDeleted: true,
-      content: "[This comment has been removed by an administrator]",
-      updatedAt: serverTimestamp()
-    });
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting comment:', error);
-    throw error;
-  }
 };
 
-// Delete a thread (admin only)
-export const deleteThread = async (threadId: string) => {
-  try {
-    const threadRef = doc(db, 'threads', threadId);
-    const threadDoc = await getDoc(threadRef);
+export const deleteThread = async (threadId: string, user: any) => {
+    try {
+        requireAdmin(user); // Ensure the user is an admin
+        const threadRef = doc(db, 'threads', threadId);
+        const threadDoc = await getDoc(threadRef);
 
-    if (!threadDoc.exists()) {
-      throw new Error('Thread not found');
+        if (!threadDoc.exists()) {
+            throw new Error('Thread not found');
+        }
+
+        await updateDoc(threadRef, {
+            status: 'deleted', // Update status to deleted
+            updatedAt: serverTimestamp(),
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting thread:', error);
+        throw error;
     }
-
-    // Mark thread as deleted
-    await updateDoc(threadRef, {
-      isDeleted: true,
-      content: "[This thread has been removed by an administrator]",
-      updatedAt: serverTimestamp()
-    });
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting thread:', error);
-    throw error;
-  }
 };
 
 // Ban a user (admin only)
 export const banUser = async (userId: string) => {
-  try {
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
 
-    if (!userDoc.exists()) {
-      throw new Error('User not found');
+        if (!userDoc.exists()) {
+            throw new Error('User not found');
+        }
+
+        // Update user status to banned
+        await updateDoc(userRef, {
+            isBanned: true,
+            banDate: serverTimestamp()
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error banning user:', error);
+        throw error;
     }
-
-    // Update user status to banned
-    await updateDoc(userRef, {
-      isBanned: true,
-      banDate: serverTimestamp()
-    });
-
-    return true;
-  } catch (error) {
-    console.error('Error banning user:', error);
-    throw error;
-  }
 };
 
 // Unban a user (admin only)
 export const unbanUser = async (userId: string) => {
-  try {
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
 
-    if (!userDoc.exists()) {
-      throw new Error('User not found');
+        if (!userDoc.exists()) {
+            throw new Error('User not found');
+        }
+
+        // Update user status to unbanned
+        await updateDoc(userRef, {
+            isBanned: false,
+            banDate: null
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error unbanning user:', error);
+        throw error;
     }
-
-    // Update user status to unbanned
-    await updateDoc(userRef, {
-      isBanned: false,
-      banDate: null
-    });
-
-    return true;
-  } catch (error) {
-    console.error('Error unbanning user:', error);
-    throw error;
-  }
 };
 
 // Get all banned users (admin only)
 export const getBannedUsers = async () => {
-  try {
-    const usersQuery = query(
-      collection(db, 'users'),
-      where('isBanned', '==', true),
-      orderBy('banDate', 'desc')
-    );
+    try {
+        const usersQuery = query(
+            collection(db, 'users'),
+            where('isBanned', '==', true),
+            orderBy('banDate', 'desc')
+        );
 
-    const snapshot = await getDocs(usersQuery);
+        const snapshot = await getDocs(usersQuery);
 
-    const users = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        displayName: data.displayName,
-        email: data.email,
-        photoURL: data.photoURL,
-        role: data.role,
-        banDate: data.banDate?.toDate(),
-      };
-    });
+        const users = snapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                displayName: data.displayName,
+                email: data.email,
+                photoURL: data.photoURL,
+                role: data.role,
+                banDate: data.banDate?.toDate(),
+            };
+        });
 
-    return users;
-  } catch (error) {
-    console.error('Error getting banned users:', error);
-    throw error;
-  }
+        return users;
+    } catch (error) {
+        console.error('Error getting banned users:', error);
+        throw error;
+    }
 };

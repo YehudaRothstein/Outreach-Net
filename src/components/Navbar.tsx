@@ -162,7 +162,7 @@ const Navbar = () => {
         <div className="sm:hidden" id="mobile-menu">
           <div className="pt-2 pb-3 space-y-1">
             <Link
-              to="/"
+              to="/admin"
               className="bg-white border-l-4 border-transparent text-gray-700 hover:bg-gray-50 hover:border-[var(--frc-blue)] hover:text-[var(--frc-blue)] block pl-3 pr-4 py-2 text-base font-medium"
               onClick={() => setIsOpen(false)}
             >

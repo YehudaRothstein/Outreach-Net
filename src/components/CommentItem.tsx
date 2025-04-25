@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { User, Heart, Trash2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { Comment, toggleCommentLike, deleteComment } from '../services/threadService';
+import { Comment, toggleCommentLike, deleteComment, banUser } from '../services/threadService';
 import toast from 'react-hot-toast';
 
 interface CommentItemProps {

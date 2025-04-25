@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { AlertCircle, User, MessageSquare, Eye, Tag, ArrowLeft, Flag, Trash2, Heart } from 'lucide-react';
@@ -29,7 +29,6 @@ const ThreadView = () => {
   const [liking, setLiking] = useState(false);
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>();
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   // Check if current user has liked the thread
   const hasUserLiked = user && thread?.likes?.includes(user.uid);
@@ -67,7 +66,7 @@ const ThreadView = () => {
       await addComment(
         id,
         data.content,
-        user.uid,
+        user.id,
         user.displayName || 'Anonymous',
         user.photoURL
       );
@@ -238,10 +237,10 @@ const ThreadView = () => {
           )}
         </div>
       </div>
-      
+
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Comments ({comments.length})</h2>
-        
+
         {user ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
             <form onSubmit={handleSubmit(onSubmitComment)}>
@@ -264,7 +263,7 @@ const ThreadView = () => {
                     placeholder="Add a comment..."
                     rows={3}
                     className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    {...register('content', { 
+                    {...register('content', {
                       required: 'Comment cannot be empty',
                       minLength: {
                         value: 5,
@@ -301,7 +300,7 @@ const ThreadView = () => {
             </div>
           </div>
         )}
-        
+
         {comments.length > 0 ? (
           <div className="space-y-4">
             {comments.map((comment) => (

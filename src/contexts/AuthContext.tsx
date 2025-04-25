@@ -5,17 +5,21 @@ import {
     signOut as firebaseSignOut,
     onAuthStateChanged,
     updateProfile,
-    User as FirebaseUser
 } from 'firebase/auth';
+
 import {doc, setDoc, serverTimestamp, getDoc} from 'firebase/firestore';
 import {auth, db} from '../firebase/config';
 
-interface User {
+export interface User {
     uid: string;
-    email: string | null;
-    role: 'user' | 'admin';
-    displayName: string | null;
+    id: string;
+    displayName: string;
+    email: string;
     photoURL: string | null;
+    role: 'user' | 'admin';
+    createdAt: Date;
+    updatedAt: Date;
+    status: 'active' | 'banned' | 'suspended';
 }
 
 interface AuthContextType {
@@ -32,10 +36,14 @@ export const AuthContext = createContext<AuthContextType>({
     user: null,
     loading: false,
     error: null,
-    register: async () => {},
-    login: async () => {},
-    logout: async () => {},
-    checkAuthState: () => {},
+    register: async () => {
+    },
+    login: async () => {
+    },
+    logout: async () => {
+    },
+    checkAuthState: () => {
+    },
 });
 
 export const AuthProvider = ({children}: { children: ReactNode }) => {
@@ -43,38 +51,40 @@ export const AuthProvider = ({children}: { children: ReactNode }) => {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    const formatUser = async (firebaseUser: FirebaseUser): Promise<User> => {
-        // Get the user's role from Firestore
+    const formatUser = async (firebaseUser: any) => {
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (!userDoc.exists()) {
+            throw new Error('User not found');
+        }
         const userData = userDoc.data();
-
         return {
             uid: firebaseUser.uid,
+            id: userDoc.id,
             email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            role: userData?.role || 'user' // Default to 'user' if no role is found
+            displayName: userData.displayName,
+            photoURL: userData.photoURL,
+            role: userData.role || 'user',
+            createdAt: userData.createdAt?.toDate() || new Date(),
+            updatedAt: userData.updatedAt?.toDate() || new Date(),
+            status: userData.status || 'active',
         };
     };
 
     const register = async (email: string, password: string, displayName: string) => {
         setLoading(true);
         try {
-            // Create user in Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const firebaseUser = userCredential.user;
 
-            // Update profile to add display name
             await updateProfile(firebaseUser, {displayName});
 
-            // Create user document in Firestore
             await setDoc(doc(db, 'users', firebaseUser.uid), {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
                 displayName,
                 photoURL: null,
                 createdAt: serverTimestamp(),
-                role: 'user'
+                role: 'user',
             });
 
             const formattedUser = await formatUser(firebaseUser);
@@ -121,7 +131,7 @@ export const AuthProvider = ({children}: { children: ReactNode }) => {
                     const formattedUser = await formatUser(firebaseUser);
                     setUser(formattedUser);
                 } catch (err) {
-                    console.error("Error fetching user data:", err);
+                    console.error('Error fetching user data:', err);
                     setUser(null);
                 }
             } else {
@@ -130,11 +140,9 @@ export const AuthProvider = ({children}: { children: ReactNode }) => {
             setLoading(false);
         });
 
-        // Clean up subscription
         return () => unsubscribe();
     }, []);
 
-    // Run checkAuthState when the component mounts
     useEffect(() => {
         const unsubscribe = checkAuthState();
         return unsubscribe;
@@ -147,7 +155,7 @@ export const AuthProvider = ({children}: { children: ReactNode }) => {
         register,
         login,
         logout,
-        checkAuthState
+        checkAuthState,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
